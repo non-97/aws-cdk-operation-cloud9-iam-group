@@ -1,16 +1,29 @@
-import * as cdk from 'aws-cdk-lib';
-import { Construct } from 'constructs';
-// import * as sqs from 'aws-cdk-lib/aws-sqs';
+import * as cdk from "aws-cdk-lib";
+import { Construct } from "constructs";
+import { OperationUsersProperty } from "../parameter";
+import { GroupConstruct } from "./construct/group-construct";
+import { UserConstruct } from "./construct/user-construct";
+import { RoleConstruct } from "./construct/role-construct";
+
+export interface OperationUsersStackProps
+  extends cdk.StackProps,
+    OperationUsersProperty {}
 
 export class OperationUsersStack extends cdk.Stack {
-  constructor(scope: Construct, id: string, props?: cdk.StackProps) {
+  constructor(scope: Construct, id: string, props: OperationUsersStackProps) {
     super(scope, id, props);
 
-    // The code that defines your stack goes here
+    const groupConstruct = new GroupConstruct(this, "GroupConstruct");
 
-    // example resource
-    // const queue = new sqs.Queue(this, 'OperationUsersQueue', {
-    //   visibilityTimeout: cdk.Duration.seconds(300)
-    // });
+    const userConstruct = new UserConstruct(this, "UserConstruct", {
+      users: props.users,
+      group: groupConstruct.group,
+    });
+
+    const roleConstruct = new RoleConstruct(this, "RoleConstruct", {
+      roles: props.roles,
+    });
+
+    roleConstruct.node.addDependency(userConstruct);
   }
 }

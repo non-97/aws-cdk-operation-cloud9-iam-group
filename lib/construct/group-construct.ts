@@ -9,44 +9,6 @@ export class GroupConstruct extends Construct {
   constructor(scope: Construct, id: string, props?: GroupConstructProps) {
     super(scope, id);
 
-    const assumeRolePolicy = new cdk.aws_iam.ManagedPolicy(
-      this,
-      "AssumeRolePolicy",
-      {
-        statements: [
-          new cdk.aws_iam.PolicyStatement({
-            effect: cdk.aws_iam.Effect.ALLOW,
-            resources: ["*"],
-            actions: ["sts:AssumeRole"],
-          }),
-        ],
-      }
-    );
-
-    const createAccessKeyPolicy = new cdk.aws_iam.ManagedPolicy(
-      this,
-      "CreateAccessKeyPolicy",
-      {
-        statements: [
-          new cdk.aws_iam.PolicyStatement({
-            effect: cdk.aws_iam.Effect.ALLOW,
-            resources: [
-              "arn:aws:iam::" +
-                cdk.Stack.of(this).account +
-                ":user/${aws:username}",
-            ],
-            actions: [
-              "iam:GetAccessKeyLastUsed",
-              "iam:ListAccessKeys",
-              "iam:CreateAccessKey",
-              "iam:DeleteAccessKey",
-              "iam:UpdateAccessKey",
-            ],
-          }),
-        ],
-      }
-    );
-
     const tagPolicy = new cdk.aws_iam.ManagedPolicy(this, "TagPolicy", {
       statements: [
         new cdk.aws_iam.PolicyStatement({
@@ -61,9 +23,9 @@ export class GroupConstruct extends Construct {
       ],
     });
 
-    const enforceMfaPolicy = new cdk.aws_iam.ManagedPolicy(
+    const selfManagedMfaPolicy = new cdk.aws_iam.ManagedPolicy(
       this,
-      "EnforceMfaPolicy",
+      "SelfManagedMfaPolicy",
       {
         statements: [
           new cdk.aws_iam.PolicyStatement({
@@ -85,45 +47,136 @@ export class GroupConstruct extends Construct {
               "iam:EnableMFADevice",
               "iam:GetLoginProfile",
               "iam:GetUser",
+              "iam:GetUserPolicy",
+              "iam:ListGroupsForUser",
+              "iam:ListAttachedUserPolicies",
+              "iam:ListUserPolicies",
               "iam:ResyncMFADevice",
               "iam:ListMFADevices",
             ],
-          }),
-          new cdk.aws_iam.PolicyStatement({
-            sid: "RestrictActionsWithoutMfa",
-            effect: cdk.aws_iam.Effect.DENY,
-            resources: ["*"],
-            notActions: [
-              "iam:ChangePassword",
-              "iam:CreateVirtualMFADevice",
-              "iam:DeleteVirtualMFADevice",
-              "iam:DeactivateMFADevice",
-              "iam:EnableMFADevice",
-              "iam:GetLoginProfile",
-              "iam:GetUser",
-              "iam:ResyncMFADevice",
-              "iam:ListMFADevices",
-            ],
-            conditions: {
-              BoolIfExists: {
-                "aws:MultiFactorAuthPresent": "false",
-              },
-            },
           }),
         ],
       }
     );
 
-    const group = new cdk.aws_iam.Group(this, "Default", {
-      managedPolicies: [
-        assumeRolePolicy,
-        createAccessKeyPolicy,
-        tagPolicy,
-        enforceMfaPolicy,
-        cdk.aws_iam.ManagedPolicy.fromAwsManagedPolicyName(
-          "IAMSelfManageServiceSpecificCredentials"
-        ),
+    const cloud9Policy = new cdk.aws_iam.ManagedPolicy(this, "Cloud9Policy", {
+      statements: [
+        new cdk.aws_iam.PolicyStatement({
+          effect: cdk.aws_iam.Effect.ALLOW,
+          resources: ["*"],
+          actions: ["cloud9:CreateEnvironmentEC2"],
+          conditions: {
+            StringLike: {
+              "cloud9:EnvironmentName": "${aws:username}*",
+              "cloud9:InstanceType": [
+                "t3.nano",
+                "t3.micro",
+                "t3.small",
+                "t3.medium",
+                "t3.large",
+              ],
+            },
+            Null: {
+              "cloud9:OwnerArn": "true",
+            },
+          },
+        }),
+        new cdk.aws_iam.PolicyStatement({
+          effect: cdk.aws_iam.Effect.ALLOW,
+          resources: ["*"],
+          actions: [
+            "cloud9:DescribeEnvironments",
+            "cloud9:DescribeEnvironmentStatus",
+            "cloud9:DescribeEnvironmentMemberships",
+            "cloud9:ListEnvironments",
+            "cloud9:ListTagsForResource",
+            "cloud9:UpdateUserSettings",
+            "ec2:DescribeVpcs",
+            "ec2:DescribeSubnets",
+            "ec2:DescribeInstanceTypeOfferings",
+            "ec2:DescribeRouteTables",
+          ],
+        }),
+        new cdk.aws_iam.PolicyStatement({
+          effect: cdk.aws_iam.Effect.ALLOW,
+          resources: ["arn:aws:iam::*:role/service-role/*"],
+          actions: ["iam:ListRoles", "iam:ListInstanceProfilesForRole"],
+        }),
+        new cdk.aws_iam.PolicyStatement({
+          effect: cdk.aws_iam.Effect.ALLOW,
+          resources: [
+            "arn:aws:iam::*:role/service-role/AWSCloud9SSMAccessRole",
+          ],
+          actions: ["iam:ListInstanceProfilesForRole", "iam:CreateRole"],
+        }),
+        new cdk.aws_iam.PolicyStatement({
+          effect: cdk.aws_iam.Effect.ALLOW,
+          resources: [
+            "arn:aws:iam::*:role/service-role/AWSCloud9SSMAccessRole",
+          ],
+          actions: ["iam:AttachRolePolicy"],
+          conditions: {
+            StringEquals: {
+              "iam:PolicyARN":
+                "arn:aws:iam::aws:policy/AWSCloud9SSMInstanceProfile",
+            },
+          },
+        }),
+        new cdk.aws_iam.PolicyStatement({
+          effect: cdk.aws_iam.Effect.ALLOW,
+          resources: [
+            "arn:aws:iam::*:role/service-role/AWSCloud9SSMAccessRole",
+          ],
+          actions: ["iam:PassRole"],
+          conditions: {
+            StringEquals: {
+              "iam:PassedToService": "ec2.amazonaws.com",
+            },
+          },
+        }),
+        new cdk.aws_iam.PolicyStatement({
+          effect: cdk.aws_iam.Effect.ALLOW,
+          resources: [
+            "arn:aws:iam::*:instance-profile/cloud9/AWSCloud9SSMInstanceProfile",
+          ],
+          actions: [
+            "iam:CreateInstanceProfile",
+            "iam:AddRoleToInstanceProfile",
+          ],
+        }),
+        new cdk.aws_iam.PolicyStatement({
+          effect: cdk.aws_iam.Effect.ALLOW,
+          resources: ["*"],
+          actions: ["iam:CreateServiceLinkedRole"],
+          conditions: {
+            StringEquals: {
+              "iam:AWSServiceName": "cloud9.amazonaws.com",
+            },
+          },
+        }),
+        new cdk.aws_iam.PolicyStatement({
+          effect: cdk.aws_iam.Effect.ALLOW,
+          resources: ["arn:aws:ec2:*:*:instance/*"],
+          actions: ["ssm:StartSession", "ssm:GetConnectionStatus"],
+          conditions: {
+            StringLike: {
+              "ssm:resourceTag/aws:cloud9:environment": "*",
+            },
+            StringEquals: {
+              "aws:CalledViaFirst": "cloud9.amazonaws.com",
+            },
+          },
+        }),
+        new cdk.aws_iam.PolicyStatement({
+          effect: cdk.aws_iam.Effect.ALLOW,
+          resources: ["arn:aws:ssm:*:*:document/*"],
+          actions: ["ssm:StartSession"],
+        }),
       ],
+    });
+
+    const group = new cdk.aws_iam.Group(this, "Default", {
+      managedPolicies: [tagPolicy, selfManagedMfaPolicy, cloud9Policy],
     });
     this.group = group;
   }

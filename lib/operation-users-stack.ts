@@ -3,7 +3,6 @@ import { Construct } from "constructs";
 import { OperationUsersProperty } from "../parameter";
 import { GroupConstruct } from "./construct/group-construct";
 import { UserConstruct } from "./construct/user-construct";
-import { RoleConstruct } from "./construct/role-construct";
 
 export interface OperationUsersStackProps
   extends cdk.StackProps,
@@ -19,11 +18,5 @@ export class OperationUsersStack extends cdk.Stack {
       users: props.users,
       group: groupConstruct.group,
     });
-
-    const roleConstruct = new RoleConstruct(this, "RoleConstruct", {
-      roles: props.roles,
-    });
-
-    roleConstruct.node.addDependency(userConstruct);
   }
 }
